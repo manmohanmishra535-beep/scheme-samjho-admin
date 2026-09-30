@@ -1,124 +1,156 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useClerk } from "@clerk/nextjs";
 import {
   LayoutDashboard,
   FileText,
-  PlusCircle,
+  Tags,
+  Settings,
   LogOut,
+  ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
 
-import { SignOutButton } from "@clerk/nextjs";
+import type { AdminRole } from "@/lib/admin";
 
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+type AdminSidebarProps = {
+  role: AdminRole;
+};
 
-const navigation = [
+type MenuItem = {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  roles: AdminRole[];
+};
+
+const menuItems: MenuItem[] = [
   {
-    title: "Dashboard",
-    href: "/",
+    label: "Dashboard",
+    href: "/admin/dashboard",
     icon: LayoutDashboard,
+    roles: ["super_admin", "editor", "viewer"],
   },
   {
-    title: "All Schemes",
-    href: "/schemes",
+    label: "Schemes",
+    href: "/admin/schemes",
     icon: FileText,
+    roles: ["super_admin", "editor", "viewer"],
   },
   {
-    title: "Add Scheme",
-    href: "/schemes/new",
-    icon: PlusCircle,
+    label: "Categories",
+    href: "/admin/categories",
+    icon: Tags,
+    roles: ["super_admin", "editor", "viewer"],
+  },
+  {
+    label: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    roles: ["super_admin"],
   },
 ];
 
-export default function AdminSidebar() {
+export default function AdminSidebar({
+  role,
+}: AdminSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { signOut } = useClerk();
+
+  const visibleItems = menuItems.filter((item) =>
+    item.roles.includes(role)
+  );
+
+  async function handleSignOut() {
+    await signOut();
+
+    router.push("/admin/login");
+    router.refresh();
+  }
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b border-[#111827]/10">
-        <Link
-          href="/"
-          className="flex items-center gap-3 px-2 py-3"
+    <aside className="flex h-screen w-64 flex-col border-r bg-white">
+      {/* BRAND */}
+      <div className="flex h-16 items-center gap-3 border-b px-5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white">
+          <ShieldCheck size={20} />
+        </div>
+
+        <div>
+          <h1 className="text-sm font-bold text-slate-900">
+            SchemeSamjho
+          </h1>
+
+          <p className="text-xs text-slate-500">
+            Admin Panel
+          </p>
+        </div>
+      </div>
+
+      {/* ROLE */}
+      <div className="border-b px-5 py-4">
+        <p className="text-xs text-slate-400">
+          Current role
+        </p>
+
+        <p className="mt-1 text-sm font-semibold capitalize text-slate-800">
+          {role.replace("_", " ")}
+        </p>
+      </div>
+
+      {/* NAVIGATION */}
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        {visibleItems.map((item) => {
+          const Icon = item.icon;
+
+          const isActive =
+            pathname === item.href ||
+            pathname.startsWith(`${item.href}/`);
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                isActive
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              <Icon size={19} />
+
+              <span className="flex-1">
+                {item.label}
+              </span>
+
+              <ChevronRight
+                size={16}
+                className={`transition ${
+                  isActive
+                    ? "opacity-100"
+                    : "opacity-0 group-hover:opacity-100"
+                }`}
+              />
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* SIGN OUT */}
+      <div className="border-t p-3">
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2563EB] text-lg font-black text-white">
-            S
-          </div>
+          <LogOut size={19} />
 
-          <div>
-            <p className="text-base font-black text-[#111827]">
-              SchemeSamjho
-            </p>
-
-            <p className="text-xs font-bold uppercase tracking-wide text-[#2563EB]">
-              Admin Panel
-            </p>
-          </div>
-        </Link>
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>
-            Management
-          </SidebarGroupLabel>
-
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navigation.map((item) => {
-                const Icon = item.icon;
-
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={active}
-                      tooltip={item.title}
-                    >
-                      <Link href={item.href}>
-                        <Icon className="h-4 w-4" />
-
-                        <span>
-                          {item.title}
-                        </span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter className="border-t border-[#111827]/10">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SignOutButton>
-              <SidebarMenuButton className="text-[#111827]/70 hover:text-[#111827]">
-                <LogOut className="h-4 w-4" />
-                <span>Sign out</span>
-              </SidebarMenuButton>
-            </SignOutButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </Sidebar>
+          <span>Sign out</span>
+        </button>
+      </div>
+    </aside>
   );
 }

@@ -1,24 +1,94 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
-const adminUserIds =
-  process.env.ADMIN_USER_IDS
-    ?.split(",")
-    .map((id) => id.trim())
-    .filter(Boolean) ?? [];
+export type AdminRole =
+  | "super_admin"
+  | "editor"
+  | "viewer";
 
-export async function requireAdmin() {
+export type AdminUser = {
+  userId: string;
+  role: AdminRole;
+};
+
+function getAdminUsers(): AdminUser[] {
+  const raw = process.env.ADMIN_USERS ?? "";
+
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const [userId, role] = item
+        .split(":")
+        .map((value) => value.trim());
+
+      let validRole: AdminRole = "viewer";
+
+      if (role === "super_admin") {
+        validRole = "super_admin";
+      } else if (role === "editor") {
+        validRole = "editor";
+      }
+
+      return {
+        userId,
+        role: validRole,
+      };
+    });
+}
+
+export async function getCurrentAdmin(): Promise<AdminUser | null> {
   const { userId } = await auth();
 
-  // Not logged in
   if (!userId) {
-    redirect("/sign-in");
+    return null;
   }
 
-  // Logged in but not an administrator
-  if (!adminUserIds.includes(userId)) {
+  return (
+    getAdminUsers().find(
+      (admin) => admin.userId === userId
+    ) ?? null
+  );
+}
+
+export async function requireAdmin(): Promise<AdminUser> {
+  const { userId } = await auth();
+
+  if (!userId) {
+    redirect("/admin/login");
+  }
+
+  const admin = getAdminUsers().find(
+    (item) => item.userId === userId
+  );
+
+  if (!admin) {
     redirect("/unauthorized");
   }
 
-  return userId;
+  return admin;
+}
+
+export async function requireEditor(): Promise<AdminUser> {
+  const admin = await requireAdmin();
+
+  if (
+    admin.role !== "super_admin" &&
+    admin.role !== "editor"
+  ) {
+    redirect("/unauthorized");
+  }
+
+  return admin;
+}
+
+export async function requireSuperAdmin(): Promise<AdminUser> {
+  const admin = await requireAdmin();
+
+  if (admin.role !== "super_admin") {
+    redirect("/unauthorized");
+  }
+
+  return admin;
 }
