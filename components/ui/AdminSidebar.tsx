@@ -1,19 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useClerk } from "@clerk/nextjs";
+
 import {
   LayoutDashboard,
   FileText,
   Tags,
   Settings,
   LogOut,
-  ShieldCheck,
-  ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 
 import type { AdminRole } from "@/lib/admin";
+
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 
 type AdminSidebarProps = {
   role: AdminRole;
@@ -57,7 +69,6 @@ export default function AdminSidebar({
   role,
 }: AdminSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { signOut } = useClerk();
 
   const visibleItems = menuItems.filter((item) =>
@@ -65,92 +76,115 @@ export default function AdminSidebar({
   );
 
   async function handleSignOut() {
-    await signOut();
-
-    router.push("/admin/login");
-    router.refresh();
+    await signOut({
+      redirectUrl: "/admin/login",
+    });
   }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-white">
-      {/* BRAND */}
-      <div className="flex h-16 items-center gap-3 border-b px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white">
-          <ShieldCheck size={20} />
-        </div>
+    <Sidebar
+      collapsible="icon"
+      className="border-r border-slate-200 bg-white"
+    >
+      {/* Navigation */}
+      <SidebarContent className="px-2">
+        <SidebarGroup className="pt-6">
+          <SidebarGroupLabel className="px-3 pb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 group-data-[collapsible=icon]:hidden">
+            Navigation
+          </SidebarGroupLabel>
 
-        <div>
-          <h1 className="text-sm font-bold text-slate-900">
-            SchemeSamjho
-          </h1>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {visibleItems.map((item) => {
+                const Icon = item.icon;
 
-          <p className="text-xs text-slate-500">
-            Admin Panel
-          </p>
-        </div>
-      </div>
+                const isActive =
+                  pathname === item.href ||
+                  pathname.startsWith(`${item.href}/`);
 
-      {/* ROLE */}
-      <div className="border-b px-5 py-4">
-        <p className="text-xs text-slate-400">
-          Current role
-        </p>
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      tooltip={item.label}
+                      className={`h-11 rounded-xl px-3 transition-all duration-200 ${
+                        isActive
+                          ? "bg-slate-950 text-white shadow-sm hover:bg-slate-950 hover:text-white"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                      }`}
+                    >
+                      <Link
+                        href={item.href}
+                        className="flex w-full items-center gap-3"
+                      >
+                        <Icon
+                          size={18}
+                          strokeWidth={isActive ? 2.2 : 1.9}
+                          className={
+                            isActive
+                              ? "shrink-0 text-white"
+                              : "shrink-0 text-slate-500"
+                          }
+                        />
 
-        <p className="mt-1 text-sm font-semibold capitalize text-slate-800">
-          {role.replace("_", " ")}
-        </p>
-      </div>
+                        <span className="truncate text-[14px] font-semibold group-data-[collapsible=icon]:hidden">
+                          {item.label}
+                        </span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-      {/* NAVIGATION */}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {visibleItems.map((item) => {
-          const Icon = item.icon;
-
-          const isActive =
-            pathname === item.href ||
-            pathname.startsWith(`${item.href}/`);
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                isActive
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
+      {/* Footer */}
+      <SidebarFooter className="border-t border-slate-200 p-2">
+        <SidebarMenu className="gap-1">
+          {/* View Website */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="View Website"
+              className="h-11 rounded-xl px-3 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
             >
-              <Icon size={19} />
+              <Link
+                href="/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center gap-3"
+              >
+                <ExternalLink
+                  size={18}
+                  className="shrink-0 text-slate-500"
+                />
 
-              <span className="flex-1">
-                {item.label}
-              </span>
+                <span className="text-[14px] font-semibold group-data-[collapsible=icon]:hidden">
+                  View Website
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
 
-              <ChevronRight
-                size={16}
-                className={`transition ${
-                  isActive
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100"
-                }`}
+          {/* Sign Out */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Sign out"
+              onClick={handleSignOut}
+              className="h-11 rounded-xl px-3 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+            >
+              <LogOut
+                size={18}
+                className="shrink-0"
               />
-            </Link>
-          );
-        })}
-      </nav>
 
-      {/* SIGN OUT */}
-      <div className="border-t p-3">
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
-        >
-          <LogOut size={19} />
-
-          <span>Sign out</span>
-        </button>
-      </div>
-    </aside>
+              <span className="text-[14px] font-semibold group-data-[collapsible=icon]:hidden">
+                Sign out
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   );
 }
