@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import {
-  User,
   ChevronDown,
-  Settings,
+  ExternalLink,
   LogOut,
+  Settings,
   ShieldCheck,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import type { AdminRole } from "@/lib/admin";
 
@@ -19,13 +19,23 @@ type AdminUserMenuProps = {
 export default function AdminUserMenu({
   role,
 }: AdminUserMenuProps) {
-  const { user, isLoaded } = useUser();
+  const { user } = useUser();
   const { signOut } = useClerk();
 
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  /* Close dropdown when clicking outside */
+  const firstName = user?.firstName || "Admin";
+  const lastName = user?.lastName || "";
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  const email =
+    user?.primaryEmailAddress?.emailAddress ||
+    "Admin account";
+
+  const initial =
+    firstName.charAt(0).toUpperCase() || "A";
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -50,153 +60,153 @@ export default function AdminUserMenu({
   }, []);
 
   async function handleSignOut() {
+    setOpen(false);
+
     await signOut({
       redirectUrl: "/admin/login",
     });
   }
-
-  if (!isLoaded) {
-    return (
-      <div className="h-9 w-32 animate-pulse rounded-lg bg-slate-100" />
-    );
-  }
-
-  const firstName = user?.firstName || "";
-  const lastName = user?.lastName || "";
-
-  const fullName =
-    `${firstName} ${lastName}`.trim() ||
-    user?.username ||
-    "Admin";
-
-  const email =
-    user?.primaryEmailAddress?.emailAddress ||
-    "No email";
-
-  const initials =
-    `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() ||
-    "A";
 
   return (
     <div
       ref={menuRef}
       className="relative"
     >
-      {/* ADMIN BUTTON */}
+      {/* Account Button */}
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50"
       >
-        {/* AVATAR */}
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
-          {user?.imageUrl ? (
-            <img
-              src={user.imageUrl}
-              alt={fullName}
-              className="h-8 w-8 rounded-full object-cover"
-            />
-          ) : (
-            initials
-          )}
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-500 text-sm font-semibold text-white">
+          {initial}
         </div>
 
-        {/* USER INFO */}
         <div className="hidden text-left sm:block">
-          <p className="max-w-[150px] truncate text-sm font-semibold text-slate-800">
+          <p className="max-w-[130px] truncate text-sm font-semibold text-slate-900">
             {fullName}
           </p>
 
-          <p className="text-xs capitalize text-slate-500">
+          <p className="mt-0.5 text-[11px] font-medium capitalize text-slate-400">
             {role.replace("_", " ")}
           </p>
         </div>
 
         <ChevronDown
-          size={16}
-          className={`text-slate-400 transition-transform ${
+          size={15}
+          className={`hidden text-slate-400 transition-transform sm:block ${
             open ? "rotate-180" : ""
           }`}
         />
       </button>
 
-      {/* DROPDOWN */}
+      {/* Custom Menu */}
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-          {/* USER DETAILS */}
+        <div
+          role="menu"
+          className="absolute right-0 top-[calc(100%+10px)] z-50 w-[300px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+        >
+          {/* Account Header */}
           <div className="border-b border-slate-100 p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-900 text-sm font-semibold text-white">
-                {user?.imageUrl ? (
-                  <img
-                    src={user.imageUrl}
-                    alt={fullName}
-                    className="h-11 w-11 object-cover"
-                  />
-                ) : (
-                  initials
-                )}
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-semibold text-white">
+                {initial}
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900">
+                <p className="truncate text-sm font-bold text-slate-950">
                   {fullName}
                 </p>
 
-                <p className="truncate text-xs text-slate-500">
+                <p className="mt-0.5 truncate text-xs text-slate-500">
                   {email}
                 </p>
+
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-1">
+                  <ShieldCheck
+                    size={12}
+                    className="text-slate-600"
+                  />
+
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                    {role.replace("_", " ")}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ROLE */}
-          <div className="border-b border-slate-100 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100">
-                <ShieldCheck
-                  size={18}
-                  className="text-slate-700"
-                />
-              </div>
-
-              <div>
-                <p className="text-xs text-slate-400">
-                  Role
-                </p>
-
-                <p className="text-sm font-semibold capitalize text-slate-800">
-                  {role.replace("_", " ")}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* MENU */}
+          {/* Menu Items */}
           <div className="p-2">
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setOpen(false);
                 window.location.href =
                   "/admin/settings";
               }}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-950"
             >
-              <Settings size={18} />
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <Settings size={17} />
+              </span>
 
-              <span>Admin Settings</span>
+              <span className="flex-1">
+                Account Settings
+              </span>
+
+              <ExternalLink
+                size={14}
+                className="text-slate-300"
+              />
             </button>
 
-            {/* SIGN OUT */}
             <button
               type="button"
-              onClick={handleSignOut}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 transition hover:bg-red-50 hover:text-red-700"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                window.open(
+                  "/",
+                  "_blank",
+                  "noopener,noreferrer"
+                );
+              }}
+              className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-950"
             >
-              <LogOut size={18} />
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <ExternalLink size={17} />
+              </span>
 
-              <span>Sign out</span>
+              <span className="flex-1">
+                View Website
+              </span>
+
+              <ExternalLink
+                size={14}
+                className="text-slate-300"
+              />
+            </button>
+          </div>
+
+          {/* Sign Out */}
+          <div className="border-t border-slate-100 p-2">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50">
+                <LogOut size={17} />
+              </span>
+
+              <span>
+                Sign out
+              </span>
             </button>
           </div>
         </div>
