@@ -5,9 +5,18 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+
 import Link from "next/link";
-import { Loader2, ShieldCheck } from "lucide-react";
+
+import {
+  Loader2,
+  ShieldCheck,
+} from "lucide-react";
 
 import {
   useAuth,
@@ -15,6 +24,10 @@ import {
   useSignIn,
   useSignUp,
 } from "@clerk/nextjs";
+
+type AdminSignupFormProps = {
+  invitationToken?: string;
+};
 
 type InvitationData = {
   id: string;
@@ -59,7 +72,9 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export default function AdminSignupForm() {
+export default function AdminSignupForm({
+  invitationToken,
+}: AdminSignupFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -68,39 +83,64 @@ export default function AdminSignupForm() {
 
   const {
     signUp,
-    errors: signUpErrors,
     fetchStatus: signUpFetchStatus,
   } = useSignUp();
 
   const {
     signIn,
-    errors: signInErrors,
     fetchStatus: signInFetchStatus,
   } = useSignIn();
 
-  const token =
+  // =====================================================
+  // INVITATION TOKEN
+  //
+  // Supports both:
+  //
+  // /admin/signup?token=abc
+  //
+  // and:
+  //
+  // <AdminSignupForm invitationToken="abc" />
+  // =====================================================
+
+  const urlToken =
     searchParams.get("token")?.trim() ?? "";
+
+  const token =
+    invitationToken?.trim() || urlToken;
 
   // =====================================================
   // INVITATION
   // =====================================================
 
-  const [invitation, setInvitation] =
-    useState<InvitationData | null>(null);
+  const [
+    invitation,
+    setInvitation,
+  ] = useState<InvitationData | null>(null);
 
-  const [isValidating, setIsValidating] =
-    useState(true);
+  const [
+    isValidating,
+    setIsValidating,
+  ] = useState(true);
 
   // =====================================================
   // FORM
   // =====================================================
 
-  const [mode, setMode] =
-    useState<SignupMode>("signup");
+  const [
+    mode,
+    setMode,
+  ] = useState<SignupMode>("signup");
 
-  const [name, setName] = useState("");
-  const [password, setPassword] =
-    useState("");
+  const [
+    name,
+    setName,
+  ] = useState("");
+
+  const [
+    password,
+    setPassword,
+  ] = useState("");
 
   // =====================================================
   // VERIFICATION
@@ -111,8 +151,10 @@ export default function AdminSignupForm() {
     setVerificationMode,
   ] = useState<VerificationMode>("none");
 
-  const [verificationCode, setVerificationCode] =
-    useState("");
+  const [
+    verificationCode,
+    setVerificationCode,
+  ] = useState("");
 
   const [
     isVerificationSubmitting,
@@ -123,15 +165,24 @@ export default function AdminSignupForm() {
   // MESSAGES
   // =====================================================
 
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  const [
+    info,
+    setInfo,
+  ] = useState("");
 
   // =====================================================
   // REDIRECT
   // =====================================================
 
-  const [isRedirecting, setIsRedirecting] =
-    useState(false);
+  const [
+    isRedirecting,
+    setIsRedirecting,
+  ] = useState(false);
 
   const isLoading =
     isValidating ||
@@ -149,6 +200,7 @@ export default function AdminSignupForm() {
     async function validateInvitation() {
       if (!token) {
         if (!cancelled) {
+          setInvitation(null);
           setError(
             "This invitation link is missing its invitation token."
           );
@@ -167,7 +219,8 @@ export default function AdminSignupForm() {
           {
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
+              "Content-Type":
+                "application/json",
             },
             body: JSON.stringify({
               token,
@@ -175,15 +228,20 @@ export default function AdminSignupForm() {
           }
         );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
-        if (!response.ok || !data.valid) {
+        if (
+          !response.ok ||
+          !data.valid
+        ) {
           if (!cancelled) {
+            setInvitation(null);
+
             setError(
               data.message ??
                 "This invitation is invalid or expired."
             );
-            setInvitation(null);
           }
 
           return;
@@ -201,6 +259,8 @@ export default function AdminSignupForm() {
         );
 
         if (!cancelled) {
+          setInvitation(null);
+
           setError(
             "Unable to validate this invitation."
           );
@@ -233,7 +293,8 @@ export default function AdminSignupForm() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             token,
@@ -242,9 +303,13 @@ export default function AdminSignupForm() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
-      if (!response.ok || !data.success) {
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         setError(
           data.message ??
             "Unable to activate your administrator account."
@@ -269,20 +334,21 @@ export default function AdminSignupForm() {
   }
 
   // =====================================================
-  // COMPLETE LOGIN / SIGNUP
+  // COMPLETE AUTHENTICATION
   //
-  // 1. finalize Clerk session
-  // 2. accept invitation
-  // 3. redirect
+  // 1. Finalize Clerk session
+  // 2. Accept invitation
+  // 3. Create admin_users record
+  // 4. Redirect to dashboard
   // =====================================================
 
   async function finishAuthentication() {
     try {
-      await (
-        mode === "signup"
-          ? signUp.finalize()
-          : signIn.finalize()
-      );
+      if (mode === "signup") {
+        await signUp.finalize();
+      } else {
+        await signIn.finalize();
+      }
 
       const accepted =
         await acceptInvitation();
@@ -376,10 +442,7 @@ export default function AdminSignupForm() {
         return;
       }
 
-      // =================================================
-      // SEND EMAIL VERIFICATION
-      // =================================================
-
+      // Send email verification code.
       const verificationResult =
         await signUp.verifications.sendEmailCode();
 
@@ -395,6 +458,7 @@ export default function AdminSignupForm() {
       }
 
       setVerificationCode("");
+
       setVerificationMode(
         "signup_email"
       );
@@ -461,7 +525,7 @@ export default function AdminSignupForm() {
       }
 
       // =================================================
-      // COMPLETE
+      // LOGIN COMPLETE
       // =================================================
 
       if (
@@ -472,7 +536,7 @@ export default function AdminSignupForm() {
       }
 
       // =================================================
-      // NEW DEVICE
+      // NEW DEVICE VERIFICATION
       // =================================================
 
       if (
@@ -618,7 +682,8 @@ export default function AdminSignupForm() {
       const result =
         await signUp.verifications.verifyEmailCode(
           {
-            code: verificationCode.trim(),
+            code:
+              verificationCode.trim(),
           }
         );
 
@@ -634,7 +699,8 @@ export default function AdminSignupForm() {
       }
 
       if (
-        signUp.status !== "complete"
+        signUp.status !==
+        "complete"
       ) {
         setError(
           "Email verification was not completed."
@@ -697,7 +763,8 @@ export default function AdminSignupForm() {
       }
 
       if (
-        signIn.status !== "complete"
+        signIn.status !==
+        "complete"
       ) {
         setError(
           "Verification was not completed."
@@ -740,7 +807,9 @@ export default function AdminSignupForm() {
       return;
     }
 
-    setIsVerificationSubmitting(true);
+    setIsVerificationSubmitting(
+      true
+    );
 
     try {
       if (
@@ -778,7 +847,8 @@ export default function AdminSignupForm() {
           setError(
             getErrorMessage(
               result.error
-            )
+            ) ||
+              "Unable to resend the verification code."
           );
 
           return;
@@ -791,7 +861,8 @@ export default function AdminSignupForm() {
           setError(
             getErrorMessage(
               result.error
-            )
+            ) ||
+              "Unable to resend the verification code."
           );
 
           return;
@@ -802,6 +873,11 @@ export default function AdminSignupForm() {
         "A new verification code has been sent."
       );
     } catch (error) {
+      console.error(
+        "RESEND CODE ERROR:",
+        error
+      );
+
       setError(
         getErrorMessage(error) ||
           "Unable to resend the verification code."
@@ -822,9 +898,7 @@ export default function AdminSignupForm() {
       <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
         <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white">
-            <ShieldCheck
-              size={30}
-            />
+            <ShieldCheck size={30} />
           </div>
 
           <h1 className="mt-6 text-2xl font-bold text-slate-950">
@@ -881,9 +955,7 @@ export default function AdminSignupForm() {
       <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
         <div className="w-full rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-            <ShieldCheck
-              size={30}
-            />
+            <ShieldCheck size={30} />
           </div>
 
           <h1 className="mt-6 text-2xl font-bold text-slate-950">
@@ -926,9 +998,7 @@ export default function AdminSignupForm() {
         <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="flex justify-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <ShieldCheck
-                size={30}
-              />
+              <ShieldCheck size={30} />
             </div>
           </div>
 
@@ -961,7 +1031,9 @@ export default function AdminSignupForm() {
           )}
 
           <form
-            onSubmit={handleVerification}
+            onSubmit={
+              handleVerification
+            }
             className="mt-6 space-y-5"
           >
             <input
@@ -976,7 +1048,10 @@ export default function AdminSignupForm() {
                 )
               }
               placeholder="Enter verification code"
-              className="h-12 w-full rounded-xl border border-slate-200 px-4 text-center text-lg tracking-[0.3em] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+              disabled={
+                isVerificationSubmitting
+              }
+              className="h-12 w-full rounded-xl border border-slate-200 px-4 text-center text-lg tracking-[0.3em] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-50"
             />
 
             <button
@@ -984,7 +1059,7 @@ export default function AdminSignupForm() {
               disabled={
                 isVerificationSubmitting
               }
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isVerificationSubmitting ? (
                 <>
@@ -1004,7 +1079,10 @@ export default function AdminSignupForm() {
             <button
               type="button"
               onClick={resendCode}
-              className="mt-5 w-full text-sm font-semibold text-slate-500 hover:text-slate-950"
+              disabled={
+                isVerificationSubmitting
+              }
+              className="mt-5 w-full text-sm font-semibold text-slate-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Resend verification code
             </button>
@@ -1016,6 +1094,7 @@ export default function AdminSignupForm() {
               setVerificationMode(
                 "none"
               );
+
               setVerificationCode("");
               setError("");
               setInfo("");
@@ -1036,13 +1115,12 @@ export default function AdminSignupForm() {
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
       <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+
         {/* ICON */}
 
         <div className="flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white">
-            <ShieldCheck
-              size={30}
-            />
+            <ShieldCheck size={30} />
           </div>
         </div>
 
@@ -1059,7 +1137,7 @@ export default function AdminSignupForm() {
           a SchemeSamjho Super Admin.
         </p>
 
-        {/* INVITATION EMAIL */}
+        {/* INVITED EMAIL */}
 
         <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1104,9 +1182,7 @@ export default function AdminSignupForm() {
           </div>
         )}
 
-        {/* =================================================
-            SIGNUP FORM
-        ================================================= */}
+        {/* SIGNUP FORM */}
 
         {mode === "signup" && (
           <form
@@ -1187,9 +1263,7 @@ export default function AdminSignupForm() {
           </form>
         )}
 
-        {/* =================================================
-            LOGIN FORM
-        ================================================= */}
+        {/* LOGIN FORM */}
 
         {mode === "login" && (
           <form
@@ -1240,14 +1314,13 @@ export default function AdminSignupForm() {
           </form>
         )}
 
-        {/* =================================================
-            MODE SWITCH
-        ================================================= */}
+        {/* MODE SWITCH */}
 
         <div className="mt-7 border-t border-slate-200 pt-6 text-center">
           {mode === "signup" ? (
             <p className="text-sm text-slate-500">
               Already have a Clerk account?
+
               <button
                 type="button"
                 onClick={() => {
@@ -1264,6 +1337,7 @@ export default function AdminSignupForm() {
           ) : (
             <p className="text-sm text-slate-500">
               Don't have an account?
+
               <button
                 type="button"
                 onClick={() => {
@@ -1284,9 +1358,10 @@ export default function AdminSignupForm() {
 
         <div className="mt-5 text-center">
           <p className="text-xs leading-5 text-slate-400">
-            This invitation is secure, time-limited,
-            and can only be used with the invited
-            email address.
+            This invitation is secure,
+            time-limited, and can only be
+            used with the invited email
+            address.
           </p>
         </div>
       </div>
