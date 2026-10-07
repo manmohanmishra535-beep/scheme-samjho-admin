@@ -1,43 +1,69 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
-export type AdminRole =
-  | "super_admin"
-  | "editor"
-  | "viewer";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+export type AdminRole = "super_admin";
 
 export type AdminUser = {
   userId: string;
   role: AdminRole;
 };
 
-function getAdminUsers(): AdminUser[] {
-  const raw = process.env.ADMIN_USERS ?? "";
+async function getAdminFromDatabase(
+  userId: string
+): Promise<AdminUser | null> {
+  const { data, error } = await supabaseAdmin
+    .from("admin_users")
+    .select(
+      "clerk_user_id, role, status"
+    )
+    .eq("clerk_user_id", userId)
+    .maybeSingle();
 
-  return raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => {
-      const [userId, role] = item
-        .split(":")
-        .map((value) => value.trim());
+  if (error) {
+    console.error(
+      "ADMIN DATABASE LOOKUP ERROR:",
+      error
+    );
 
-      let validRole: AdminRole = "viewer";
+    return null;
+  }
 
-      if (role === "super_admin") {
-        validRole = "super_admin";
-      } else if (role === "editor") {
-        validRole = "editor";
-      }
+  if (!data) {
+    return null;
+  }
 
-      return {
-        userId,
-        role: validRole,
-      };
-    });
+  /*
+   * Administrator must be active.
+   */
+  if (data.status !== "active") {
+    return null;
+  }
+
+  /*
+   * This application supports only
+   * the Super Admin role.
+   */
+  if (data.role !== "super_admin") {
+    console.error(
+      "INVALID ADMIN ROLE:",
+      data.role
+    );
+
+    return null;
+  }
+
+  return {
+    userId: data.clerk_user_id,
+    role: "super_admin",
+  };
 }
 
+/**
+ * Returns the currently authenticated
+ * Super Admin or null.
+ */
 export async function getCurrentAdmin(): Promise<AdminUser | null> {
   const { userId } = await auth();
 
@@ -45,13 +71,13 @@ export async function getCurrentAdmin(): Promise<AdminUser | null> {
     return null;
   }
 
-  return (
-    getAdminUsers().find(
-      (admin) => admin.userId === userId
-    ) ?? null
-  );
+  return getAdminFromDatabase(userId);
 }
 
+/**
+ * Requires an authenticated and active
+ * Super Admin.
+ */
 export async function requireAdmin(): Promise<AdminUser> {
   const { userId } = await auth();
 
@@ -59,9 +85,8 @@ export async function requireAdmin(): Promise<AdminUser> {
     redirect("/admin/login");
   }
 
-  const admin = getAdminUsers().find(
-    (item) => item.userId === userId
-  );
+  const admin =
+    await getAdminFromDatabase(userId);
 
   if (!admin) {
     redirect("/unauthorized");
@@ -70,25 +95,14 @@ export async function requireAdmin(): Promise<AdminUser> {
   return admin;
 }
 
-export async function requireEditor(): Promise<AdminUser> {
-  const admin = await requireAdmin();
-
-  if (
-    admin.role !== "super_admin" &&
-    admin.role !== "editor"
-  ) {
-    redirect("/unauthorized");
-  }
-
-  return admin;
-}
-
+/**
+ * Requires an authenticated and active
+ * Super Admin.
+ *
+ * Currently this is equivalent to
+ * requireAdmin() because Super Admin
+ * is the only supported role.
+ */
 export async function requireSuperAdmin(): Promise<AdminUser> {
-  const admin = await requireAdmin();
-
-  if (admin.role !== "super_admin") {
-    redirect("/unauthorized");
-  }
-
-  return admin;
+  return requireAdmin();
 }

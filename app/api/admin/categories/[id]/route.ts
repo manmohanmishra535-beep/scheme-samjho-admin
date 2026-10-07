@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  requireEditor,
-  requireSuperAdmin,
-} from "@/lib/admin";
+import { requireSuperAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type Context = {
@@ -17,7 +14,7 @@ export async function GET(
   context: Context
 ) {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const { id } = await context.params;
 
@@ -85,7 +82,7 @@ export async function PATCH(
   context: Context
 ) {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const { id } = await context.params;
 

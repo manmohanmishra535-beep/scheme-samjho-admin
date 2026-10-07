@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  requireEditor,
-  requireSuperAdmin,
-} from "@/lib/admin";
+import { requireSuperAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type Params = {
@@ -21,7 +18,7 @@ export async function GET(
   { params }: Params
 ) {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const { id } = await params;
 
@@ -80,7 +77,7 @@ export async function PATCH(
   { params }: Params
 ) {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const { id } = await params;
 

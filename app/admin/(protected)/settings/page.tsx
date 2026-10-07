@@ -1,337 +1,162 @@
+import Link from "next/link";
 import {
-  Activity,
-  Database,
+  ArrowLeft,
+  MailPlus,
   ShieldCheck,
-  UserCog,
-  Server,
-  LockKeyhole,
+  Users,
 } from "lucide-react";
+
+import AddAdminForm from "@/components/admin/AddAdminForm";
+import AdminList from "@/components/admin/AdminList";
+import PendingInvitations from "@/components/admin/PendingInvitations";
 
 import { requireSuperAdmin } from "@/lib/admin";
 
-export default async function AdminSettingsPage() {
-  const admin = await requireSuperAdmin();
+export default async function AdminManagementPage() {
+  await requireSuperAdmin();
 
   return (
     <div className="space-y-7">
-      {/* Header */}
-      <section>
-        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-500">
-          <ShieldCheck size={16} />
-          <span>Admin Portal</span>
-          <span className="text-slate-300">/</span>
-          <span className="text-slate-400">Settings</span>
-        </div>
+      {/* Page Header */}
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          {/* Breadcrumb */}
+          <div className="mb-4 flex items-center gap-2 text-sm">
+            <Link
+              href="/admin/settings"
+              className="inline-flex items-center gap-1.5 font-medium text-slate-500 transition hover:text-slate-950"
+            >
+              <ArrowLeft size={15} />
+              Settings
+            </Link>
 
-        <h1 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-          Admin Settings
-        </h1>
+            <span className="text-slate-300">
+              /
+            </span>
 
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-          Manage administration, security and system information
-          for SchemeSamjho.
-        </p>
-      </section>
-
-      {/* Admin Account */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-            <UserCog size={19} />
+            <span className="font-medium text-slate-950">
+              Admin Management
+            </span>
           </div>
 
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">
-              Admin Account
-            </h2>
+          {/* Title */}
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm">
+              <ShieldCheck
+                size={23}
+                strokeWidth={2}
+              />
+            </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Current administrator access information.
-            </p>
-          </div>
-        </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+                Admin Management
+              </h1>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <InfoCard
-            label="Access Level"
-            value={formatRole(admin.role)}
-          />
-
-          <InfoCard
-            label="Authorization"
-            value="Verified"
-          />
-        </div>
-      </section>
-
-      {/* Security */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-            <LockKeyhole size={19} />
-          </div>
-
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">
-              Security
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Security status for the administration panel.
-            </p>
+              <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-500">
+                Manage administrators, invite new
+                team members, and control their
+                access to SchemeSamjho.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-5 divide-y divide-slate-100">
-          <StatusRow
-            icon={<ShieldCheck size={17} />}
-            label="Authentication"
-            description="Administrator authentication is enabled."
-            status="Active"
-          />
-
-          <StatusRow
-            icon={<LockKeyhole size={17} />}
-            label="Server-side authorization"
-            description="Admin permissions are verified on the server."
-            status="Enabled"
-          />
-
-          <StatusRow
-            icon={<UserCog size={17} />}
-            label="Role-based access"
-            description="Access is controlled using administrator roles."
-            status="Enabled"
-          />
+        {/* Security Badge */}
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3.5 py-2 text-xs font-semibold text-green-700">
+          <ShieldCheck size={15} />
+          Super Admin Only
         </div>
-      </section>
+      </div>
 
-      {/* System */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-            <Server size={19} />
-          </div>
-
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">
-              System Information
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Current status of the SchemeSamjho administration system.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <SystemCard
-            icon={<Activity size={18} />}
-            label="Application"
-            value="Operational"
-          />
-
-          <SystemCard
-            icon={<Database size={18} />}
-            label="Database"
-            value="Connected"
-          />
-
-          <SystemCard
-            icon={<ShieldCheck size={18} />}
-            label="Admin Access"
-            value="Protected"
-          />
-        </div>
-      </section>
-
-      {/* Access Roles */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
-            <UserCog size={19} />
-          </div>
-
-          <div>
-            <h2 className="text-base font-semibold text-slate-950">
-              Administrator Roles
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Roles currently supported by SchemeSamjho Admin.
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <RoleCard
-            title="Super Admin"
-            description="Full administrative access and system settings."
-            active
-          />
-
-          <RoleCard
-            title="Editor"
-            description="Manage schemes and categories."
-          />
-
-          <RoleCard
-            title="Viewer"
-            description="View administration content without editing."
-          />
-        </div>
-      </section>
-
-      {/* Secure Administration */}
-      <section className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/10">
+      {/* Security Information */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
             <ShieldCheck size={19} />
           </div>
 
           <div>
-            <h2 className="text-sm font-semibold">
-              Secure Administration
+            <h2 className="text-sm font-semibold text-slate-950">
+              Secure administrator access
             </h2>
 
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
-              Administrative pages are protected by authentication
-              and server-side role authorization. Only authorized
-              administrators can access protected functionality.
+            <p className="mt-1 text-sm leading-6 text-slate-500">
+              New administrators can only be added
+              through an invitation created by an
+              active Super Admin. Invitation links
+              expire after 48 hours and can only be
+              used once.
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Add Administrator */}
+      <section>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+            <MailPlus size={18} />
+          </div>
+
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">
+              Add Administrator
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              Send a secure invitation to a new
+              administrator.
+            </p>
+          </div>
+        </div>
+
+        <AddAdminForm />
+      </section>
+
+      {/* Pending Invitations */}
+      <section>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+            <MailPlus size={18} />
+          </div>
+
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">
+              Invitations
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              Track administrator invitations and
+              revoke pending invitations.
+            </p>
+          </div>
+        </div>
+
+        <PendingInvitations />
+      </section>
+
+      {/* Administrators */}
+      <section>
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+            <Users size={18} />
+          </div>
+
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">
+              Administrators
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              View administrators and manage their
+              account status.
+            </p>
+          </div>
+        </div>
+
+        <AdminList />
       </section>
     </div>
-  );
-}
-
-function InfoCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-medium text-slate-400">
-        {label}
-      </p>
-
-      <p className="mt-1 text-sm font-semibold capitalize text-slate-900">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function StatusRow({
-  icon,
-  label,
-  description,
-  status,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  description: string;
-  status: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-          {icon}
-        </div>
-
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900">
-            {label}
-          </p>
-
-          <p className="mt-0.5 text-xs text-slate-500">
-            {description}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-emerald-500" />
-
-        <span className="text-sm font-semibold text-emerald-600">
-          {status}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function SystemCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-          {icon}
-        </div>
-
-        <div>
-          <p className="text-xs font-medium text-slate-400">
-            {label}
-          </p>
-
-          <p className="mt-0.5 text-sm font-semibold text-slate-900">
-            {value}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RoleCard({
-  title,
-  description,
-  active = false,
-}: {
-  title: string;
-  description: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-xl border p-4 ${
-        active
-          ? "border-slate-300 bg-slate-50"
-          : "border-slate-200 bg-white"
-      }`}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-slate-900">
-          {title}
-        </h3>
-
-        {active && (
-          <span className="rounded-md bg-slate-950 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-            Current
-          </span>
-        )}
-      </div>
-
-      <p className="mt-2 text-xs leading-5 text-slate-500">
-        {description}
-      </p>
-    </div>
-  );
-}
-
-function formatRole(role: string) {
-  return role.replace(/_/g, " ");
+  )
 }

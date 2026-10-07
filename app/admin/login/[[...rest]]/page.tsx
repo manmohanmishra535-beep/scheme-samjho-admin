@@ -1,14 +1,17 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
 import AdminLoginForm from "@/components/auth/AdminLoginForm";
 
-export default async function AdminLoginPage() {
-  const { userId } = await auth();
+export default async function AdminLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    token?: string;
+  }>;
+}) {
+  const params = await searchParams;
 
-  // If already signed in, don't show the login form again.
-  if (userId) {
-    redirect("/admin/dashboard");
-  }
-
-  return <AdminLoginForm />;
+  return (
+    <AdminLoginForm
+      invitationToken={params.token ?? ""}
+    />
+  );
 }

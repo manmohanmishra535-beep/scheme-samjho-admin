@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireEditor } from "@/lib/admin";
+import { requireSuperAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function createSlug(value: string) {
@@ -17,7 +17,7 @@ function createSlug(value: string) {
 */
 export async function GET() {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const { data, error } = await supabaseAdmin
       .from("schemes")
@@ -71,7 +71,7 @@ export async function GET() {
 */
 export async function POST(request: Request) {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const body = await request.json();
 

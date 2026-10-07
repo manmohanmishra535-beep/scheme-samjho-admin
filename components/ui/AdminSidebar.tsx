@@ -35,7 +35,6 @@ type MenuItem = {
   label: string;
   href: string;
   icon: React.ElementType;
-  roles: AdminRole[];
 };
 
 const menuItems: MenuItem[] = [
@@ -43,25 +42,21 @@ const menuItems: MenuItem[] = [
     label: "Dashboard",
     href: "/admin/dashboard",
     icon: LayoutDashboard,
-    roles: ["super_admin", "editor", "viewer"],
   },
   {
     label: "Schemes",
     href: "/admin/schemes",
     icon: FileText,
-    roles: ["super_admin", "editor", "viewer"],
   },
   {
     label: "Categories",
     href: "/admin/categories",
     icon: Tags,
-    roles: ["super_admin", "editor", "viewer"],
   },
   {
     label: "Settings",
     href: "/admin/settings",
     icon: Settings,
-    roles: ["super_admin"],
   },
 ];
 
@@ -71,9 +66,16 @@ export default function AdminSidebar({
   const pathname = usePathname();
   const { signOut } = useClerk();
 
-  const visibleItems = menuItems.filter((item) =>
-    item.roles.includes(role)
-  );
+  /*
+   * The admin system currently supports only
+   * one role: Super Admin.
+   *
+   * Keep this check here so the sidebar cannot
+   * accidentally be rendered for an unsupported role.
+   */
+  if (role !== "super_admin") {
+    return null;
+  }
 
   async function handleSignOut() {
     await signOut({
@@ -95,7 +97,7 @@ export default function AdminSidebar({
 
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {visibleItems.map((item) => {
+              {menuItems.map((item) => {
                 const Icon = item.icon;
 
                 const isActive =

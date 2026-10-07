@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, requireEditor } from "@/lib/admin";
+import { requireAdmin, requireSuperAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function GET() {
@@ -43,7 +43,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    await requireEditor();
+    await requireSuperAdmin();
 
     const body = await request.json();
 

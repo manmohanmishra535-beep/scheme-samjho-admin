@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Tags } from "lucide-react";
 
-import { requireEditor } from "@/lib/admin";
+import { requireSuperAdmin } from "@/lib/admin";
 import EditCategoryForm from "@/components/admin/EditCategoryForm";
 
 type PageProps = {
@@ -13,7 +13,7 @@ type PageProps = {
 export default async function EditCategoryPage({
   params,
 }: PageProps) {
-  await requireEditor();
+  await requireSuperAdmin();
 
   const { id } = await params;
 

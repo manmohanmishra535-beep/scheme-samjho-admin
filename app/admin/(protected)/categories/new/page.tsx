@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { ArrowLeft, Tags } from "lucide-react";
-import { requireEditor } from "@/lib/admin";
+import { requireSuperAdmin } from "@/lib/admin";
 import AddCategoryForm from "./AddCategoryForm";
 
 export default async function NewCategoryPage() {
-  await requireEditor();
+  await requireSuperAdmin();
 
   return (
     <main className="mx-auto max-w-3xl">
