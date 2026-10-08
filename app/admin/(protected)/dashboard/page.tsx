@@ -247,14 +247,6 @@ export default async function AdminDashboardPage() {
                 icon={<ShieldCheck size={18} />}
               />
             )}
-
-            <ActionCard
-              title="View Website"
-              description="Open the public SchemeSamjho website."
-              href="/"
-              icon={<ExternalLink size={18} />}
-                external
-            />
           </div>
         </div>
 
@@ -499,19 +491,15 @@ function ActionCard({
   description,
   href,
   icon,
-  external = false,
 }: {
   title: string;
   description: string;
   href: string;
   icon: React.ReactNode;
-  external?: boolean;
 }) {
   return (
     <Link
       href={href}
-      target={external ? "_blank" : undefined}
-      rel={external ? "noopener noreferrer" : undefined}
       className="
         group
         flex

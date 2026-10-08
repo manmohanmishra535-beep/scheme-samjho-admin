@@ -9,8 +9,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-import { ShieldCheck, ExternalLink } from "lucide-react";
-import Link from "next/link";
+import { ShieldCheck } from "lucide-react";
 
 export default async function AdminLayout({
   children,
@@ -28,7 +27,9 @@ export default async function AdminLayout({
         <header className="sticky top-0 z-40 flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
           {/* Left Side */}
           <div className="flex items-center gap-3">
-            <SidebarTrigger className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950" />
+            <SidebarTrigger
+              className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950"
+            />
 
             <div className="hidden h-7 w-px bg-slate-200 sm:block" />
 
@@ -54,21 +55,7 @@ export default async function AdminLayout({
 
           {/* Right Side */}
           <div className="flex items-center gap-3">
-            {/* View Website */}
-            <Link
-              href="/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 sm:flex"
-            >
-              <span>View Website</span>
-
-              <ExternalLink size={15} />
-            </Link>
-
-            <div className="hidden h-8 w-px bg-slate-200 sm:block" />
-
-            {/* Custom Admin Account Menu */}
+            {/* Admin Account Menu */}
             <AdminUserMenu role={admin.role} />
           </div>
         </header>

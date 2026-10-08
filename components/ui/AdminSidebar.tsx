@@ -10,7 +10,6 @@ import {
   Tags,
   Settings,
   LogOut,
-  ExternalLink,
 } from "lucide-react";
 
 import type { AdminRole } from "@/lib/admin";
@@ -69,9 +68,6 @@ export default function AdminSidebar({
   /*
    * The admin system currently supports only
    * one role: Super Admin.
-   *
-   * Keep this check here so the sidebar cannot
-   * accidentally be rendered for an unsupported role.
    */
   if (role !== "super_admin") {
     return null;
@@ -144,30 +140,6 @@ export default function AdminSidebar({
       {/* Footer */}
       <SidebarFooter className="border-t border-slate-200 p-2">
         <SidebarMenu className="gap-1">
-          {/* View Website */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="View Website"
-              className="h-11 rounded-xl px-3 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950"
-            >
-              <Link
-                href="/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex w-full items-center gap-3"
-              >
-                <ExternalLink
-                  size={18}
-                  className="shrink-0 text-slate-500"
-                />
-
-                <span className="text-[14px] font-semibold group-data-[collapsible=icon]:hidden">
-                  View Website
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
           {/* Sign Out */}
           <SidebarMenuItem>
             <SidebarMenuButton
