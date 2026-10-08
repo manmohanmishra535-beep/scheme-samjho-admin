@@ -1,32 +1,34 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useState,
-  type FormEvent,
 } from "react";
 
 import {
-  useRouter,
-  useSearchParams,
-} from "next/navigation";
-
-import Link from "next/link";
-
-import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  Eye,
+  EyeOff,
   Loader2,
+  LockKeyhole,
+  Mail,
   ShieldCheck,
+  UserRound,
 } from "lucide-react";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
 import {
-  useAuth,
-  useClerk,
   useSignIn,
   useSignUp,
 } from "@clerk/nextjs";
 
 type AdminSignupFormProps = {
-  invitationToken?: string;
+  invitationToken: string;
 };
 
 type InvitationData = {
@@ -36,17 +38,27 @@ type InvitationData = {
   expiresAt: string;
 };
 
-type SignupMode = "signup" | "login";
+type InvitationResponse = {
+  success?: boolean;
+  message?: string;
+  invitation?: InvitationData;
+};
+
+type AcceptResponse = {
+  success?: boolean;
+  message?: string;
+};
 
 type VerificationMode =
   | "none"
   | "signup_email"
-  | "login_email"
-  | "login_totp";
+  | "device_trust_email"
+  | "signin_mfa_email"
+  | "signin_mfa_totp";
 
 function getErrorMessage(error: unknown): string {
-  if (!error) {
-    return "";
+  if (error instanceof Error) {
+    return error.message;
   }
 
   if (
@@ -54,823 +66,828 @@ function getErrorMessage(error: unknown): string {
     error !== null &&
     "message" in error
   ) {
-    const message = (
-      error as {
-        message?: unknown;
-      }
-    ).message;
+    const message = (error as { message?: unknown })
+      .message;
 
     if (typeof message === "string") {
       return message;
     }
   }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
+  return "Something went wrong. Please try again.";
 }
 
 export default function AdminSignupForm({
   invitationToken,
 }: AdminSignupFormProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const { isSignedIn } = useAuth();
-  const { signOut } = useClerk();
 
   const {
     signUp,
+    errors: signUpErrors,
     fetchStatus: signUpFetchStatus,
   } = useSignUp();
 
   const {
     signIn,
+    errors: signInErrors,
     fetchStatus: signInFetchStatus,
   } = useSignIn();
 
-  // =====================================================
-  // INVITATION TOKEN
-  //
-  // Supports both:
-  //
-  // /admin/signup?token=abc
-  //
-  // and:
-  //
-  // <AdminSignupForm invitationToken="abc" />
-  // =====================================================
+  const [invitation, setInvitation] =
+    useState<InvitationData | null>(null);
 
-  const urlToken =
-    searchParams.get("token")?.trim() ?? "";
+  const [loadingInvitation, setLoadingInvitation] =
+    useState(true);
 
-  const token =
-    invitationToken?.trim() || urlToken;
+  const [invitationError, setInvitationError] =
+    useState("");
 
-  // =====================================================
-  // INVITATION
-  // =====================================================
+  const [mode, setMode] = useState<
+    "signup" | "login"
+  >("signup");
 
-  const [
-    invitation,
-    setInvitation,
-  ] = useState<InvitationData | null>(null);
+  const [name, setName] = useState("");
 
-  const [
-    isValidating,
-    setIsValidating,
-  ] = useState(true);
+  const [password, setPassword] =
+    useState("");
 
-  // =====================================================
-  // FORM
-  // =====================================================
+  const [showPassword, setShowPassword] =
+    useState(false);
 
-  const [
-    mode,
-    setMode,
-  ] = useState<SignupMode>("signup");
+  const [code, setCode] = useState("");
 
-  const [
-    name,
-    setName,
-  ] = useState("");
+  const [verificationMode, setVerificationMode] =
+    useState<VerificationMode>("none");
 
-  const [
-    password,
-    setPassword,
-  ] = useState("");
+  const [loading, setLoading] =
+    useState(false);
 
-  // =====================================================
-  // VERIFICATION
-  // =====================================================
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-  const [
-    verificationMode,
-    setVerificationMode,
-  ] = useState<VerificationMode>("none");
+  const [successMessage, setSuccessMessage] =
+    useState("");
 
-  const [
-    verificationCode,
-    setVerificationCode,
-  ] = useState("");
+  const [acceptingInvitation, setAcceptingInvitation] =
+    useState(false);
 
-  const [
-    isVerificationSubmitting,
-    setIsVerificationSubmitting,
-  ] = useState(false);
+  /*
+   * --------------------------------------------------
+   * Validate invitation
+   * --------------------------------------------------
+   */
 
-  // =====================================================
-  // MESSAGES
-  // =====================================================
-
-  const [
-    error,
-    setError,
-  ] = useState("");
-
-  const [
-    info,
-    setInfo,
-  ] = useState("");
-
-  // =====================================================
-  // REDIRECT
-  // =====================================================
-
-  const [
-    isRedirecting,
-    setIsRedirecting,
-  ] = useState(false);
-
-  const isLoading =
-    isValidating ||
-    signUpFetchStatus === "fetching" ||
-    signInFetchStatus === "fetching" ||
-    isRedirecting;
-
-  // =====================================================
-  // VALIDATE INVITATION
-  // =====================================================
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function validateInvitation() {
-      if (!token) {
-        if (!cancelled) {
-          setInvitation(null);
-          setError(
-            "This invitation link is missing its invitation token."
-          );
-          setIsValidating(false);
-        }
-
+  const validateInvitation =
+    useCallback(async () => {
+      if (!invitationToken) {
+        setInvitationError(
+          "Invitation token is missing."
+        );
+        setLoadingInvitation(false);
         return;
       }
 
       try {
-        setIsValidating(true);
-        setError("");
+        setLoadingInvitation(true);
+        setInvitationError("");
+        setErrorMessage("");
 
         const response = await fetch(
           "/api/admin/invitations/validate",
           {
             method: "POST",
             headers: {
-              "Content-Type":
-                "application/json",
+              "Content-Type": "application/json",
             },
+            cache: "no-store",
             body: JSON.stringify({
-              token,
+              token: invitationToken,
             }),
           }
         );
 
-        const data =
+        const result: InvitationResponse =
           await response.json();
 
-        if (
-          !response.ok ||
-          !data.valid
-        ) {
-          if (!cancelled) {
-            setInvitation(null);
-
-            setError(
-              data.message ??
-                "This invitation is invalid or expired."
-            );
-          }
-
-          return;
-        }
-
-        if (!cancelled) {
-          setInvitation(
-            data.invitation
+        if (!response.ok) {
+          throw new Error(
+            result.message ||
+              "This invitation is invalid or has expired."
           );
         }
+
+        if (!result.invitation) {
+          throw new Error(
+            "Invitation information could not be loaded."
+          );
+        }
+
+        if (
+          result.invitation.role !==
+          "super_admin"
+        ) {
+          throw new Error(
+            "This invitation does not have administrator permissions."
+          );
+        }
+
+        setInvitation(result.invitation);
       } catch (error) {
         console.error(
           "VALIDATE INVITATION ERROR:",
           error
         );
 
-        if (!cancelled) {
-          setInvitation(null);
-
-          setError(
-            "Unable to validate this invitation."
-          );
-        }
+        setInvitationError(
+          getErrorMessage(error)
+        );
       } finally {
-        if (!cancelled) {
-          setIsValidating(false);
-        }
+        setLoadingInvitation(false);
       }
-    }
+    }, [invitationToken]);
 
-    void validateInvitation();
+  useEffect(() => {
+    validateInvitation();
+  }, [validateInvitation]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  /*
+   * --------------------------------------------------
+   * Accept invitation in database
+   * --------------------------------------------------
+   */
 
-  // =====================================================
-  // ACCEPT INVITATION
-  //
-  // IMPORTANT:
-  // Clerk session must already be finalized.
-  // =====================================================
+  const acceptInvitation =
+    useCallback(async () => {
+      if (!invitationToken) {
+        throw new Error(
+          "Invitation token is missing."
+        );
+      }
 
-  async function acceptInvitation(): Promise<boolean> {
-    try {
-      const response = await fetch(
-        "/api/admin/invitations/accept",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            token,
-            name: name.trim(),
-          }),
-        }
-      );
+      setAcceptingInvitation(true);
 
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        setError(
-          data.message ??
-            "Unable to activate your administrator account."
+      try {
+        const response = await fetch(
+          "/api/admin/invitations/accept",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            cache: "no-store",
+            body: JSON.stringify({
+              token: invitationToken,
+              name:
+                name.trim() ||
+                invitation?.email ||
+                "Administrator",
+            }),
+          }
         );
 
-        return false;
-      }
+        const result: AcceptResponse =
+          await response.json();
 
-      return true;
-    } catch (error) {
-      console.error(
-        "ACCEPT INVITATION ERROR:",
-        error
-      );
-
-      setError(
-        "Unable to activate your administrator account."
-      );
-
-      return false;
-    }
-  }
-
-  // =====================================================
-  // COMPLETE AUTHENTICATION
-  //
-  // 1. Finalize Clerk session
-  // 2. Accept invitation
-  // 3. Create admin_users record
-  // 4. Redirect to dashboard
-  // =====================================================
-
-  async function finishAuthentication() {
-    try {
-      if (mode === "signup") {
-        await signUp.finalize();
-      } else {
-        await signIn.finalize();
-      }
-
-      const accepted =
-        await acceptInvitation();
-
-      if (!accepted) {
-        try {
-          await signOut();
-        } catch (signOutError) {
-          console.error(
-            "SIGN OUT ERROR:",
-            signOutError
+        if (!response.ok) {
+          throw new Error(
+            result.message ||
+              "Unable to activate your administrator account."
           );
         }
 
-        return false;
+        return result;
+      } finally {
+        setAcceptingInvitation(false);
       }
+    }, [
+      invitationToken,
+      name,
+      invitation?.email,
+    ]);
 
-      setIsRedirecting(true);
+  /*
+   * --------------------------------------------------
+   * Finish Clerk sign-in
+   * --------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * 1. Clerk authentication
+   * 2. finalize()
+   * 3. Accept invitation in Supabase
+   * 4. Dashboard
+   *
+   * Do NOT reverse this order.
+   */
 
-      router.replace(
-        "/admin/dashboard"
-      );
+  const finishSignIn =
+    useCallback(async () => {
+      try {
+        setLoading(true);
+        setErrorMessage("");
 
-      return true;
-    } catch (error) {
-      console.error(
-        "FINISH AUTHENTICATION ERROR:",
-        error
-      );
+        const { error } =
+          await signIn.finalize();
 
-      setError(
-        getErrorMessage(error) ||
-          "Unable to complete administrator registration."
-      );
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Unable to complete sign in."
+          );
+        }
 
-      setIsRedirecting(false);
+        await acceptInvitation();
 
-      return false;
-    }
-  }
+        setSuccessMessage(
+          "Administrator account activated successfully."
+        );
 
-  // =====================================================
-  // SIGN UP
-  // =====================================================
+        router.replace("/admin/dashboard");
+      } catch (error) {
+        console.error(
+          "FINISH SIGN IN ERROR:",
+          error
+        );
+
+        setErrorMessage(
+          getErrorMessage(error)
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, [
+      signIn,
+      acceptInvitation,
+      router,
+    ]);
+
+  /*
+   * --------------------------------------------------
+   * Finish Clerk sign-up
+   * --------------------------------------------------
+   */
+
+  const finishSignUp =
+    useCallback(async () => {
+      try {
+        setLoading(true);
+        setErrorMessage("");
+
+        const { error } =
+          await signUp.finalize();
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Unable to complete account creation."
+          );
+        }
+
+        await acceptInvitation();
+
+        setSuccessMessage(
+          "Administrator account created successfully."
+        );
+
+        router.replace("/admin/dashboard");
+      } catch (error) {
+        console.error(
+          "FINISH SIGN UP ERROR:",
+          error
+        );
+
+        setErrorMessage(
+          getErrorMessage(error)
+        );
+      } finally {
+        setLoading(false);
+      }
+    }, [
+      signUp,
+      acceptInvitation,
+      router,
+    ]);
+
+  /*
+   * --------------------------------------------------
+   * Create new Clerk account
+   * --------------------------------------------------
+   */
 
   async function handleSignup(
-    event: FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    setError("");
-    setInfo("");
-
     if (!invitation) {
-      setError(
-        "The invitation is not valid."
+      setErrorMessage(
+        "The invitation could not be verified."
       );
       return;
     }
 
-    if (!name.trim()) {
-      setError(
-        "Please enter your name."
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      setErrorMessage(
+        "Please enter your full name."
+      );
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage(
+        "Please enter a password."
       );
       return;
     }
 
     if (password.length < 8) {
-      setError(
+      setErrorMessage(
         "Password must contain at least 8 characters."
       );
       return;
     }
 
     try {
-      const result =
-        await signUp.create({
+      setLoading(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const { error } =
+        await signUp.password({
           emailAddress:
             invitation.email,
           password,
         });
 
-      if (result.error) {
-        setError(
-          getErrorMessage(
-            result.error
-          ) ||
+      if (error) {
+        throw new Error(
+          error.message ||
             "Unable to create your account."
         );
-
-        return;
       }
 
-      // Send email verification code.
-      const verificationResult =
+      /*
+       * Send email verification code.
+       */
+
+      const {
+        error: verificationError,
+      } =
         await signUp.verifications.sendEmailCode();
 
-      if (verificationResult.error) {
-        setError(
-          getErrorMessage(
-            verificationResult.error
-          ) ||
-            "Unable to send the email verification code."
+      if (verificationError) {
+        throw new Error(
+          verificationError.message ||
+            "Unable to send the verification code."
         );
-
-        return;
       }
-
-      setVerificationCode("");
 
       setVerificationMode(
         "signup_email"
       );
 
-      setInfo(
-        "We've sent a verification code to your invited email address."
+      setSuccessMessage(
+        `A verification code has been sent to ${invitation.email}.`
       );
     } catch (error) {
       console.error(
-        "ADMIN SIGNUP ERROR:",
+        "SIGNUP ERROR:",
         error
       );
 
-      setError(
-        getErrorMessage(error) ||
-          "Unable to create your administrator account."
+      setErrorMessage(
+        getErrorMessage(error)
       );
+    } finally {
+      setLoading(false);
     }
   }
 
-  // =====================================================
-  // EXISTING CLERK ACCOUNT LOGIN
-  // =====================================================
+  /*
+   * --------------------------------------------------
+   * Existing Clerk account login
+   * --------------------------------------------------
+   */
 
   async function handleLogin(
-    event: FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    setError("");
-    setInfo("");
-
     if (!invitation) {
-      setError(
-        "The invitation is not valid."
+      setErrorMessage(
+        "The invitation could not be verified."
       );
       return;
     }
 
     if (!password) {
-      setError(
+      setErrorMessage(
         "Please enter your password."
       );
       return;
     }
 
     try {
-      const result =
+      setLoading(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const { error } =
         await signIn.password({
           emailAddress:
             invitation.email,
           password,
         });
 
-      if (result.error) {
-        setError(
-          getErrorMessage(
-            result.error
-          ) ||
+      if (error) {
+        throw new Error(
+          error.message ||
             "Unable to sign in."
         );
-
-        return;
       }
 
-      // =================================================
-      // LOGIN COMPLETE
-      // =================================================
-
-      if (
-        signIn.status === "complete"
-      ) {
-        await finishAuthentication();
-        return;
-      }
-
-      // =================================================
-      // NEW DEVICE VERIFICATION
-      // =================================================
+      /*
+       * Device Trust
+       *
+       * New devices can require email verification.
+       */
 
       if (
         signIn.status ===
         "needs_client_trust"
       ) {
         const emailFactor =
-          (
-            signIn.supportedSecondFactors ??
-            []
-          ).find(
+          signIn.supportedSecondFactors?.find(
             (factor) =>
               factor.strategy ===
               "email_code"
           );
 
         if (!emailFactor) {
-          setError(
-            "This device requires verification, but email verification is unavailable."
+          throw new Error(
+            "This device requires verification, but email verification is not available."
           );
-
-          return;
         }
 
-        const codeResult =
+        const {
+          error: deviceError,
+        } =
           await signIn.mfa.sendEmailCode();
 
-        if (codeResult.error) {
-          setError(
-            getErrorMessage(
-              codeResult.error
-            ) ||
-              "Unable to send the device verification code."
+        if (deviceError) {
+          throw new Error(
+            deviceError.message ||
+              "Unable to send device verification code."
           );
-
-          return;
         }
 
-        setVerificationCode("");
-
         setVerificationMode(
-          "login_email"
+          "device_trust_email"
         );
 
-        setInfo(
-          "We've sent a verification code to your email to verify this device."
+        setSuccessMessage(
+          `A verification code has been sent to ${invitation.email}.`
         );
 
         return;
       }
 
-      // =================================================
-      // SECOND FACTOR
-      // =================================================
+      /*
+       * Normal MFA.
+       */
 
       if (
         signIn.status ===
         "needs_second_factor"
       ) {
-        const factors =
-          signIn.supportedSecondFactors ??
-          [];
-
         const emailFactor =
-          factors.find(
+          signIn.supportedSecondFactors?.find(
             (factor) =>
               factor.strategy ===
               "email_code"
           );
 
+        if (emailFactor) {
+          const {
+            error: mfaError,
+          } =
+            await signIn.mfa.sendEmailCode();
+
+          if (mfaError) {
+            throw new Error(
+              mfaError.message ||
+                "Unable to send MFA verification code."
+            );
+          }
+
+          setVerificationMode(
+            "signin_mfa_email"
+          );
+
+          setSuccessMessage(
+            `A verification code has been sent to ${invitation.email}.`
+          );
+
+          return;
+        }
+
         const totpFactor =
-          factors.find(
+          signIn.supportedSecondFactors?.find(
             (factor) =>
               factor.strategy ===
               "totp"
           );
 
-        if (emailFactor) {
-          const codeResult =
-            await signIn.mfa.sendEmailCode();
-
-          if (codeResult.error) {
-            setError(
-              getErrorMessage(
-                codeResult.error
-              ) ||
-                "Unable to send the verification code."
-            );
-
-            return;
-          }
-
-          setVerificationCode("");
-
-          setVerificationMode(
-            "login_email"
-          );
-
-          setInfo(
-            "A verification code has been sent to your email."
-          );
-
-          return;
-        }
-
         if (totpFactor) {
-          setVerificationCode("");
-
           setVerificationMode(
-            "login_totp"
+            "signin_mfa_totp"
           );
 
-          setInfo(
-            "Enter the code from your authenticator app."
+          setSuccessMessage(
+            "Enter the verification code from your authenticator app."
           );
 
           return;
         }
+
+        throw new Error(
+          "Additional verification is required, but no supported verification method was found."
+        );
       }
 
-      setError(
-        "Additional verification is required to continue."
+      /*
+       * Normal login completed.
+       */
+
+      if (
+        signIn.status === "complete"
+      ) {
+        await finishSignIn();
+        return;
+      }
+
+      throw new Error(
+        `Unable to complete sign in. Current status: ${signIn.status}`
       );
     } catch (error) {
       console.error(
-        "INVITED USER LOGIN ERROR:",
+        "LOGIN ERROR:",
         error
       );
 
-      setError(
-        getErrorMessage(error) ||
-          "Unable to sign in."
+      setErrorMessage(
+        getErrorMessage(error)
       );
+    } finally {
+      setLoading(false);
     }
   }
 
-  // =====================================================
-  // SIGNUP EMAIL VERIFICATION
-  // =====================================================
-
-  async function verifySignupEmail() {
-    try {
-      const result =
-        await signUp.verifications.verifyEmailCode(
-          {
-            code:
-              verificationCode.trim(),
-          }
-        );
-
-      if (result.error) {
-        setError(
-          getErrorMessage(
-            result.error
-          ) ||
-            "Invalid verification code."
-        );
-
-        return;
-      }
-
-      if (
-        signUp.status !==
-        "complete"
-      ) {
-        setError(
-          "Email verification was not completed."
-        );
-
-        return;
-      }
-
-      await finishAuthentication();
-    } catch (error) {
-      console.error(
-        "SIGNUP EMAIL VERIFICATION ERROR:",
-        error
-      );
-
-      setError(
-        getErrorMessage(error) ||
-          "Unable to verify your email."
-      );
-    }
-  }
-
-  // =====================================================
-  // LOGIN VERIFICATION
-  // =====================================================
-
-  async function verifyLoginCode() {
-    try {
-      const code =
-        verificationCode.trim();
-
-      let result;
-
-      if (
-        verificationMode ===
-        "login_totp"
-      ) {
-        result =
-          await signIn.mfa.verifyTOTP({
-            code,
-          });
-      } else {
-        result =
-          await signIn.mfa.verifyEmailCode(
-            {
-              code,
-            }
-          );
-      }
-
-      if (result.error) {
-        setError(
-          getErrorMessage(
-            result.error
-          ) ||
-            "Invalid verification code."
-        );
-
-        return;
-      }
-
-      if (
-        signIn.status !==
-        "complete"
-      ) {
-        setError(
-          "Verification was not completed."
-        );
-
-        return;
-      }
-
-      await finishAuthentication();
-    } catch (error) {
-      console.error(
-        "LOGIN VERIFICATION ERROR:",
-        error
-      );
-
-      setError(
-        getErrorMessage(error) ||
-          "Unable to verify the code."
-      );
-    }
-  }
-
-  // =====================================================
-  // VERIFICATION SUBMIT
-  // =====================================================
+  /*
+   * --------------------------------------------------
+   * Verify email / MFA code
+   * --------------------------------------------------
+   */
 
   async function handleVerification(
-    event: FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    setError("");
-    setInfo("");
+    const trimmedCode =
+      code.trim();
 
-    if (!verificationCode.trim()) {
-      setError(
+    if (!trimmedCode) {
+      setErrorMessage(
         "Please enter the verification code."
       );
-
       return;
     }
 
-    setIsVerificationSubmitting(
-      true
-    );
+    if (trimmedCode.length < 4) {
+      setErrorMessage(
+        "Please enter a valid verification code."
+      );
+      return;
+    }
 
     try {
+      setLoading(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      /*
+       * New account email verification.
+       */
+
       if (
         verificationMode ===
         "signup_email"
       ) {
-        await verifySignupEmail();
-      } else {
-        await verifyLoginCode();
+        const { error } =
+          await signUp.verifications.verifyEmailCode(
+            {
+              code: trimmedCode,
+            }
+          );
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Invalid verification code."
+          );
+        }
+
+        if (
+          signUp.status !== "complete"
+        ) {
+          throw new Error(
+            "Email verified, but the account setup is not complete yet."
+          );
+        }
+
+        await finishSignUp();
+        return;
       }
-    } finally {
-      setIsVerificationSubmitting(
-        false
+
+      /*
+       * New device verification.
+       */
+
+      if (
+        verificationMode ===
+        "device_trust_email"
+      ) {
+        const { error } =
+          await signIn.mfa.verifyEmailCode(
+            {
+              code: trimmedCode,
+            }
+          );
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Invalid device verification code."
+          );
+        }
+
+        if (
+          signIn.status !== "complete"
+        ) {
+          throw new Error(
+            "Device verification completed, but sign in is not complete."
+          );
+        }
+
+        await finishSignIn();
+        return;
+      }
+
+      /*
+       * Normal MFA email verification.
+       */
+
+      if (
+        verificationMode ===
+        "signin_mfa_email"
+      ) {
+        const { error } =
+          await signIn.mfa.verifyEmailCode(
+            {
+              code: trimmedCode,
+            }
+          );
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Invalid MFA verification code."
+          );
+        }
+
+        if (
+          signIn.status !== "complete"
+        ) {
+          throw new Error(
+            "Verification completed, but sign in is not complete."
+          );
+        }
+
+        await finishSignIn();
+        return;
+      }
+
+      /*
+       * Authenticator app verification.
+       */
+
+      if (
+        verificationMode ===
+        "signin_mfa_totp"
+      ) {
+        const { error } =
+          await signIn.mfa.verifyTOTP(
+            {
+              code: trimmedCode,
+            }
+          );
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Invalid authenticator code."
+          );
+        }
+
+        if (
+          signIn.status !== "complete"
+        ) {
+          throw new Error(
+            "Verification completed, but sign in is not complete."
+          );
+        }
+
+        await finishSignIn();
+        return;
+      }
+    } catch (error) {
+      console.error(
+        "VERIFICATION ERROR:",
+        error
       );
+
+      setErrorMessage(
+        getErrorMessage(error)
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
-  // =====================================================
-  // RESEND CODE
-  // =====================================================
+  /*
+   * --------------------------------------------------
+   * Resend verification code
+   * --------------------------------------------------
+   */
 
-  async function resendCode() {
-    setError("");
-    setInfo("");
-
+  async function handleResendCode() {
     try {
+      setLoading(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
       if (
         verificationMode ===
         "signup_email"
       ) {
-        const result =
+        const { error } =
           await signUp.verifications.sendEmailCode();
 
-        if (result.error) {
-          setError(
-            getErrorMessage(
-              result.error
-            ) ||
-              "Unable to resend the verification code."
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Unable to resend verification code."
           );
-
-          return;
-        }
-      } else {
-        const result =
-          await signIn.mfa.sendEmailCode();
-
-        if (result.error) {
-          setError(
-            getErrorMessage(
-              result.error
-            ) ||
-              "Unable to resend the verification code."
-          );
-
-          return;
         }
       }
 
-      setInfo(
-        "A new verification code has been sent."
+      if (
+        verificationMode ===
+        "device_trust_email"
+      ) {
+        const { error } =
+          await signIn.mfa.sendEmailCode();
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Unable to resend device verification code."
+          );
+        }
+      }
+
+      if (
+        verificationMode ===
+        "signin_mfa_email"
+      ) {
+        const { error } =
+          await signIn.mfa.sendEmailCode();
+
+        if (error) {
+          throw new Error(
+            error.message ||
+              "Unable to resend MFA code."
+          );
+        }
+      }
+
+      setSuccessMessage(
+        `A new verification code has been sent to ${invitation?.email}.`
       );
     } catch (error) {
       console.error(
@@ -878,199 +895,255 @@ export default function AdminSignupForm({
         error
       );
 
-      setError(
-        getErrorMessage(error) ||
-          "Unable to resend the verification code."
+      setErrorMessage(
+        getErrorMessage(error)
       );
+    } finally {
+      setLoading(false);
     }
   }
 
-  // =====================================================
-  // ALREADY SIGNED IN
-  // =====================================================
+  /*
+   * --------------------------------------------------
+   * Change authentication mode
+   * --------------------------------------------------
+   */
+
+  function switchMode(
+    nextMode: "signup" | "login"
+  ) {
+    setMode(nextMode);
+    setErrorMessage("");
+    setSuccessMessage("");
+    setPassword("");
+  }
+
+  /*
+   * --------------------------------------------------
+   * Loading invitation
+   * --------------------------------------------------
+   */
+
+  if (loadingInvitation) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
+          <Loader2
+            size={18}
+            className="animate-spin"
+          />
+          Validating invitation...
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * --------------------------------------------------
+   * Invalid invitation
+   * --------------------------------------------------
+   */
 
   if (
-    isSignedIn &&
-    !isRedirecting &&
-    verificationMode === "none"
+    !invitation ||
+    invitationError
   ) {
     return (
-      <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
-        <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white">
-            <ShieldCheck size={30} />
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl border border-red-200 bg-white p-6 shadow-sm">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-600">
+            <AlertCircle size={22} />
           </div>
 
-          <h1 className="mt-6 text-2xl font-bold text-slate-950">
-            Already signed in
-          </h1>
-
-          <p className="mt-2 text-sm text-slate-500">
-            Please sign out before using
-            an administrator invitation.
-          </p>
-
-          <button
-            type="button"
-            onClick={async () => {
-              await signOut();
-              router.refresh();
-            }}
-            className="mt-6 h-11 w-full rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800"
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // =====================================================
-  // LOADING INVITATION
-  // =====================================================
-
-  if (isValidating) {
-    return (
-      <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
-        <div className="text-center">
-          <Loader2
-            className="mx-auto animate-spin text-slate-700"
-            size={32}
-          />
-
-          <p className="mt-4 text-sm text-slate-500">
-            Validating invitation...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // =====================================================
-  // INVALID INVITATION
-  // =====================================================
-
-  if (!invitation) {
-    return (
-      <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
-        <div className="w-full rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-600">
-            <ShieldCheck size={30} />
-          </div>
-
-          <h1 className="mt-6 text-2xl font-bold text-slate-950">
+          <h2 className="mt-5 text-xl font-semibold text-slate-950">
             Invalid invitation
-          </h1>
+          </h2>
 
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            {error ||
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {invitationError ||
               "This administrator invitation is no longer valid."}
           </p>
 
           <Link
             href="/admin/login"
-            className="mt-6 flex h-11 items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800"
+            className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800"
           >
-            Go to Admin Login
+            <ArrowLeft size={16} />
+            Back to Admin Login
           </Link>
         </div>
       </div>
     );
   }
 
-  // =====================================================
-  // VERIFICATION PAGE
-  // =====================================================
+  /*
+   * --------------------------------------------------
+   * Verification screen
+   * --------------------------------------------------
+   */
 
   if (
-    verificationMode !== "none"
+    verificationMode !==
+    "none"
   ) {
-    const isSignup =
+    const isSignupVerification =
       verificationMode ===
       "signup_email";
 
     const isTotp =
       verificationMode ===
-      "login_totp";
+      "signin_mfa_totp";
+
+    let title =
+      "Verify your account";
+
+    let description =
+      `Enter the verification code sent to ${invitation.email}.`;
+
+    if (
+      verificationMode ===
+      "device_trust_email"
+    ) {
+      title = "Verify this device";
+
+      description =
+        `For security, verify this new device using the code sent to ${invitation.email}.`;
+    }
+
+    if (
+      verificationMode ===
+      "signin_mfa_email"
+    ) {
+      title = "Additional verification";
+
+      description =
+        `Enter the MFA code sent to ${invitation.email}.`;
+    }
+
+    if (isTotp) {
+      title = "Authenticator verification";
+
+      description =
+        "Enter the 6-digit code from your authenticator app.";
+    }
 
     return (
-      <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
-        <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <div className="flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white">
-              <ShieldCheck size={30} />
-            </div>
+      <div className="w-full max-w-md">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950 text-white">
+            {isTotp ? (
+              <LockKeyhole size={22} />
+            ) : (
+              <Mail size={22} />
+            )}
           </div>
 
-          <h1 className="mt-6 text-center text-2xl font-bold text-slate-950">
-            {isSignup
-              ? "Verify your email"
-              : isTotp
-                ? "Verify your identity"
-                : "Verify this device"}
+          <h1 className="mt-5 text-2xl font-bold text-slate-950">
+            {title}
           </h1>
 
-          <p className="mt-2 text-center text-sm leading-6 text-slate-500">
-            {isSignup
-              ? `Enter the verification code sent to ${invitation.email}.`
-              : isTotp
-                ? "Enter the code from your authenticator app."
-                : "Enter the verification code sent to your email to verify this device."}
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {description}
           </p>
 
-          {error && (
-            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+          {!isTotp && (
+            <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <div className="flex items-start gap-2">
+                <Mail
+                  size={16}
+                  className="mt-0.5 shrink-0 text-blue-600"
+                />
+
+                <p className="text-xs leading-5 text-blue-800">
+                  Check your inbox for the
+                  verification code.
+                </p>
+              </div>
             </div>
           )}
 
-          {info && (
-            <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              {info}
+          {errorMessage && (
+            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle
+                  size={16}
+                  className="mt-0.5 shrink-0 text-red-600"
+                />
+
+                <p className="text-sm text-red-700">
+                  {errorMessage}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="flex items-start gap-2">
+                <CheckCircle2
+                  size={16}
+                  className="mt-0.5 shrink-0 text-emerald-600"
+                />
+
+                <p className="text-sm text-emerald-700">
+                  {successMessage}
+                </p>
+              </div>
             </div>
           )}
 
           <form
-            onSubmit={
-              handleVerification
-            }
-            className="mt-6 space-y-5"
+            onSubmit={handleVerification}
+            className="mt-6 space-y-4"
           >
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoFocus
-              value={verificationCode}
-              onChange={(event) =>
-                setVerificationCode(
-                  event.target.value
-                )
-              }
-              placeholder="Enter verification code"
-              disabled={
-                isVerificationSubmitting
-              }
-              className="h-12 w-full rounded-xl border border-slate-200 px-4 text-center text-lg tracking-[0.3em] outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-50"
-            />
+            <div>
+              <label
+                htmlFor="verification-code"
+                className="mb-2 block text-sm font-semibold text-slate-800"
+              >
+                Verification code
+              </label>
+
+              <input
+                id="verification-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={(event) =>
+                  setCode(
+                    event.target.value
+                  )
+                }
+                placeholder="Enter verification code"
+                maxLength={8}
+                disabled={loading}
+                autoFocus
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-center text-lg font-semibold tracking-[0.3em] text-slate-950 outline-none transition placeholder:tracking-normal placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:bg-slate-50"
+              />
+            </div>
 
             <button
               type="submit"
               disabled={
-                isVerificationSubmitting
+                loading ||
+                !code.trim()
               }
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isVerificationSubmitting ? (
+              {loading ? (
                 <>
                   <Loader2
-                    size={18}
-                    className="mr-2 animate-spin"
+                    size={17}
+                    className="animate-spin"
                   />
                   Verifying...
                 </>
               ) : (
-                "Verify"
+                <>
+                  <ShieldCheck size={17} />
+                  Verify and Continue
+                </>
               )}
             </button>
           </form>
@@ -1078,11 +1151,11 @@ export default function AdminSignupForm({
           {!isTotp && (
             <button
               type="button"
-              onClick={resendCode}
-              disabled={
-                isVerificationSubmitting
+              onClick={
+                handleResendCode
               }
-              className="mt-5 w-full text-sm font-semibold text-slate-500 hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={loading}
+              className="mt-4 w-full text-center text-sm font-semibold text-slate-700 hover:text-slate-950 disabled:opacity-50"
             >
               Resend verification code
             </button>
@@ -1094,13 +1167,14 @@ export default function AdminSignupForm({
               setVerificationMode(
                 "none"
               );
-
-              setVerificationCode("");
-              setError("");
-              setInfo("");
+              setCode("");
+              setErrorMessage("");
+              setSuccessMessage("");
             }}
-            className="mt-4 w-full text-sm font-semibold text-slate-500 hover:text-slate-950"
+            disabled={loading}
+            className="mt-3 flex w-full items-center justify-center gap-2 text-sm text-slate-500 hover:text-slate-800"
           >
+            <ArrowLeft size={15} />
             Back
           </button>
         </div>
@@ -1108,89 +1182,169 @@ export default function AdminSignupForm({
     );
   }
 
-  // =====================================================
-  // MAIN INVITATION PAGE
-  // =====================================================
+  /*
+   * --------------------------------------------------
+   * Main signup/login UI
+   * --------------------------------------------------
+   */
+
+  const isSubmitting =
+    loading ||
+    acceptingInvitation ||
+    signUpFetchStatus ===
+      "fetching" ||
+    signInFetchStatus ===
+      "fetching";
 
   return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-md items-center justify-center px-4">
-      <div className="w-full rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+    <div className="w-full max-w-md">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        {/* Header */}
 
-        {/* ICON */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950 text-white">
+            <ShieldCheck size={23} />
+          </div>
 
-        <div className="flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-950 text-white">
-            <ShieldCheck size={30} />
+          <div>
+            <h1 className="text-xl font-bold text-slate-950">
+              SchemeSamjho Admin
+            </h1>
+
+            <p className="text-sm text-slate-500">
+              Administrator invitation
+            </p>
           </div>
         </div>
 
-        {/* TITLE */}
+        {/* Invitation information */}
 
-        <h1 className="mt-6 text-center text-3xl font-bold text-slate-950">
-          {mode === "signup"
-            ? "Join SchemeSamjho Admin"
-            : "Admin Sign In"}
-        </h1>
+        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex items-start gap-3">
+            <Mail
+              size={18}
+              className="mt-0.5 shrink-0 text-slate-500"
+            />
 
-        <p className="mt-2 text-center text-sm leading-6 text-slate-500">
-          You have been invited to become
-          a SchemeSamjho Super Admin.
-        </p>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Invited email
+              </p>
 
-        {/* INVITED EMAIL */}
+              <p className="mt-1 break-all text-sm font-semibold text-slate-950">
+                {invitation.email}
+              </p>
+            </div>
+          </div>
 
-        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Invited email
-          </p>
+          <div className="mt-4 flex items-start gap-3">
+            <UserRound
+              size={18}
+              className="mt-0.5 shrink-0 text-slate-500"
+            />
 
-          <p className="mt-1 break-all text-sm font-semibold text-slate-900">
-            {invitation.email}
-          </p>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Administrator role
+              </p>
+
+              <p className="mt-1 text-sm font-semibold text-slate-950">
+                Super Admin
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* ROLE */}
+        {/* Security notice */}
 
-        <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-            Administrator role
-          </p>
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <div className="flex items-start gap-2">
+            <ShieldCheck
+              size={16}
+              className="mt-0.5 shrink-0 text-emerald-600"
+            />
 
-          <p className="mt-1 text-sm font-bold text-blue-900">
-            Super Admin
-          </p>
-
-          <p className="mt-1 text-xs leading-5 text-blue-700">
-            This invitation grants full
-            SchemeSamjho Admin access.
-          </p>
+            <p className="text-xs leading-5 text-emerald-800">
+              This invitation grants full
+              Super Admin access to
+              SchemeSamjho.
+            </p>
+          </div>
         </div>
 
-        {/* ERROR */}
+        {/* Mode switch */}
 
-        {error && (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
-            {error}
+        <div className="mt-6 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() =>
+              switchMode("signup")
+            }
+            className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+              mode === "signup"
+                ? "bg-white text-slate-950 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Create Account
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              switchMode("login")
+            }
+            className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
+              mode === "login"
+                ? "bg-white text-slate-950 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Existing Account
+          </button>
+        </div>
+
+        {/* Error */}
+
+        {errorMessage && (
+          <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
+            <div className="flex items-start gap-2">
+              <AlertCircle
+                size={17}
+                className="mt-0.5 shrink-0 text-red-600"
+              />
+
+              <p className="text-sm leading-5 text-red-700">
+                {errorMessage}
+              </p>
+            </div>
           </div>
         )}
 
-        {/* INFO */}
+        {/* Success */}
 
-        {info && (
-          <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-700">
-            {info}
+        {successMessage && (
+          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-start gap-2">
+              <CheckCircle2
+                size={17}
+                className="mt-0.5 shrink-0 text-emerald-600"
+              />
+
+              <p className="text-sm leading-5 text-emerald-700">
+                {successMessage}
+              </p>
+            </div>
           </div>
         )}
 
-        {/* SIGNUP FORM */}
+        {/* Signup */}
 
-        {mode === "signup" && (
+        {mode === "signup" ? (
           <form
             onSubmit={handleSignup}
-            className="mt-7 space-y-5"
+            className="mt-6 space-y-4"
           >
-            {/* NAME */}
-
             <div>
               <label
                 htmlFor="admin-name"
@@ -1199,77 +1353,176 @@ export default function AdminSignupForm({
                 Full name
               </label>
 
-              <input
-                id="admin-name"
-                type="text"
-                autoComplete="name"
-                value={name}
-                onChange={(event) =>
-                  setName(
-                    event.target.value
-                  )
-                }
-                placeholder="Enter your name"
-                disabled={isLoading}
-                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-50"
-              />
+              <div className="relative">
+                <UserRound
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  id="admin-name"
+                  type="text"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(event) =>
+                    setName(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Enter your full name"
+                  disabled={isSubmitting}
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white pl-11 pr-4 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:bg-slate-50"
+                />
+              </div>
             </div>
 
-            {/* PASSWORD */}
+            <div>
+              <label
+                htmlFor="admin-email"
+                className="mb-2 block text-sm font-semibold text-slate-800"
+              >
+                Email address
+              </label>
+
+              <div className="relative">
+                <Mail
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  id="admin-email"
+                  type="email"
+                  value={invitation.email}
+                  readOnly
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-600 outline-none"
+                />
+              </div>
+
+              <p className="mt-1.5 text-xs text-slate-500">
+                This email is locked to the
+                invitation.
+              </p>
+            </div>
 
             <div>
               <label
                 htmlFor="admin-password"
                 className="mb-2 block text-sm font-semibold text-slate-800"
               >
-                Create password
+                Password
               </label>
 
-              <input
-                id="admin-password"
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                onChange={(event) =>
-                  setPassword(
-                    event.target.value
-                  )
-                }
-                placeholder="At least 8 characters"
-                disabled={isLoading}
-                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-50"
-              />
-            </div>
+              <div className="relative">
+                <LockKeyhole
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
 
-            {/* CREATE ACCOUNT */}
+                <input
+                  id="admin-password"
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Create a password"
+                  disabled={isSubmitting}
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white pl-11 pr-12 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:bg-slate-50"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPassword(
+                      (current) =>
+                        !current
+                    )
+                  }
+                  disabled={isSubmitting}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:text-slate-700"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showPassword ? (
+                    <EyeOff size={17} />
+                  ) : (
+                    <Eye size={17} />
+                  )}
+                </button>
+              </div>
+
+              <p className="mt-1.5 text-xs text-slate-500">
+                Use at least 8 characters.
+              </p>
+            </div>
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={
+                isSubmitting ||
+                !name.trim() ||
+                !password
+              }
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <Loader2
-                    size={18}
-                    className="mr-2 animate-spin"
+                    size={17}
+                    className="animate-spin"
                   />
                   Creating account...
                 </>
               ) : (
-                "Create Super Admin Account"
+                <>
+                  <ShieldCheck size={17} />
+                  Create Super Admin Account
+                </>
               )}
             </button>
           </form>
-        )}
+        ) : (
+          /* Existing account login */
 
-        {/* LOGIN FORM */}
-
-        {mode === "login" && (
           <form
             onSubmit={handleLogin}
-            className="mt-7 space-y-5"
+            className="mt-6 space-y-4"
           >
+            <div>
+              <label
+                htmlFor="existing-admin-email"
+                className="mb-2 block text-sm font-semibold text-slate-800"
+              >
+                Email address
+              </label>
+
+              <div className="relative">
+                <Mail
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  id="existing-admin-email"
+                  type="email"
+                  value={invitation.email}
+                  readOnly
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-medium text-slate-600 outline-none"
+                />
+              </div>
+            </div>
+
             <div>
               <label
                 htmlFor="existing-admin-password"
@@ -1278,92 +1531,108 @@ export default function AdminSignupForm({
                 Password
               </label>
 
-              <input
-                id="existing-admin-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) =>
-                  setPassword(
-                    event.target.value
-                  )
-                }
-                placeholder="Enter your password"
-                disabled={isLoading}
-                className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 disabled:bg-slate-50"
-              />
+              <div className="relative">
+                <LockKeyhole
+                  size={17}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  id="existing-admin-password"
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Enter your password"
+                  disabled={isSubmitting}
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white pl-11 pr-12 text-sm text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-slate-950 focus:ring-2 focus:ring-slate-950/10 disabled:bg-slate-50"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPassword(
+                      (current) =>
+                        !current
+                    )
+                  }
+                  disabled={isSubmitting}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:text-slate-700"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showPassword ? (
+                    <EyeOff size={17} />
+                  ) : (
+                    <Eye size={17} />
+                  )}
+                </button>
+              </div>
             </div>
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={
+                isSubmitting ||
+                !password
+              }
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <Loader2
-                    size={18}
-                    className="mr-2 animate-spin"
+                    size={17}
+                    className="animate-spin"
                   />
                   Signing in...
                 </>
               ) : (
-                "Sign in & Accept Invitation"
+                <>
+                  <ShieldCheck size={17} />
+                  Continue as Super Admin
+                </>
               )}
             </button>
           </form>
         )}
 
-        {/* MODE SWITCH */}
+        {/* Security footer */}
 
-        <div className="mt-7 border-t border-slate-200 pt-6 text-center">
-          {mode === "signup" ? (
-            <p className="text-sm text-slate-500">
-              Already have a Clerk account?
+        <div className="mt-6 border-t border-slate-200 pt-5">
+          <div className="flex items-start gap-2">
+            <LockKeyhole
+              size={15}
+              className="mt-0.5 shrink-0 text-emerald-600"
+            />
 
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("login");
-                  setPassword("");
-                  setError("");
-                  setInfo("");
-                }}
-                className="ml-1 font-semibold text-slate-950 underline underline-offset-4"
-              >
-                Sign in
-              </button>
+            <p className="text-xs leading-5 text-slate-500">
+              Your authentication is handled
+              securely by Clerk. The
+              administrator invitation is
+              validated separately before
+              Super Admin access is granted.
             </p>
-          ) : (
-            <p className="text-sm text-slate-500">
-              Don't have an account?
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMode("signup");
-                  setPassword("");
-                  setError("");
-                  setInfo("");
-                }}
-                className="ml-1 font-semibold text-slate-950 underline underline-offset-4"
-              >
-                Create account
-              </button>
-            </p>
-          )}
+          </div>
         </div>
 
-        {/* SECURITY NOTICE */}
-
-        <div className="mt-5 text-center">
-          <p className="text-xs leading-5 text-slate-400">
-            This invitation is secure,
-            time-limited, and can only be
-            used with the invited email
-            address.
-          </p>
-        </div>
+        <Link
+          href="/admin/login"
+          className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-950"
+        >
+          <ArrowLeft size={15} />
+          Back to Admin Login
+        </Link>
       </div>
     </div>
   );
